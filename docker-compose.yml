@@ -1,0 +1,8 @@
+services:
+  python:
+    build:
+      dockerfile: Dockerfile
+      context: .
+
+volumes:
+  data: {} # a Docker volume is created with root ownership
