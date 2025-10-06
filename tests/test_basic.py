@@ -32,5 +32,5 @@ def test_pow_negative_exponent():
     assert ba.powc(2, -2) == 0.25
 
 def test_error_pow_zero_zero():
-    with pytest.raises(ZeroDivisionError):
+    with pytest.raises(ValueError):
         ba.powc(0, 0)
