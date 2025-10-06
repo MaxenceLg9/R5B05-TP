@@ -1,5 +1,7 @@
 stages:
   - test
+  - build
+  - deploy
 
 test-job:
   stage: test
@@ -16,4 +18,58 @@ test-job:
     when: always
     reports:
       junit: reports/report.xml
-  allow_failure: false
+
+build-job:
+  stage: build
+  image: docker:26.1.4-dind
+  services:
+    - name: docker:26.1.4-dind
+      alias: docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    DOCKERFILE_PATH: "Dockerfile"
+    STUDENT_CODE: "MLAG"
+    IMAGE_PREFIX: "$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$STUDENT_CODE"
+  before_script:
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - docker build --pull -f "$DOCKERFILE_PATH" -t "$IMAGE_PREFIX-$CI_COMMIT_SHORT_SHA" .
+    - docker push "$IMAGE_PREFIX-$CI_COMMIT_SHORT_SHA"
+    - |
+      if [[ -n "$CI_COMMIT_TAG" ]]; then
+        echo "Build triggered by tag: $CI_COMMIT_TAG"
+        docker tag "$IMAGE_PREFIX-$CI_COMMIT_SHORT_SHA" "$IMAGE_PREFIX-$CI_COMMIT_TAG"
+        docker push "$IMAGE_PREFIX-$CI_COMMIT_TAG"
+      fi
+
+deploy:
+  # Ce job appartient au stage "deploy"
+  stage: deploy
+  # Utilise une image Docker officielle Python 3.12
+  image: python:3.12
+  variables:
+    EC2_PUBLIC_IP: 35.180.85.12 # <---------------------- À remplacer par l'IP fournie par l'enseignant
+    STUDENT_CODE: "MKAN" # <---------------------- À remplacer par votre code étudiant
+    IMAGE_PREFIX: "$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$STUDENT_CODE"
+  # Règles qui déterminent si le job doit être exécuté
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  # Étapes à exécuter avant le script principal
+  before_script:
+    # Installe Ansible
+  - pip install --no-cache-dir ansible
+  - mkdir -p ~/.ssh
+    # Configure la clé SSH pour se connecter au serveur EC2
+  - echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+    # Donne les permissions appropriées à la clé privée
+  - chmod 600 ~/.ssh/id_rsa
+    # Ajoute l'IP du serveur EC2 aux hôtes connus pour éviter les prompts interactifs
+  - ssh-keyscan -H $EC2_PUBLIC_IP >> ~/.ssh/known_hosts
+  script:
+    # Commande pour exécuter le playbook Ansible de déploiement
+    - ansible-playbook -i ansible/inventory ansible/deploy.yml --extra-vars "image=$IMAGE_PREFIX-$CI_COMMIT_TAG student_code=$STUDENT_CODE dockerhub_username=$DOCKERHUB_USERNAME dockerhub_token=$DOCKERHUB_TOKEN"
