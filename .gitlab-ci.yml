@@ -1,0 +1,21 @@
+stages:
+  - test
+  - build
+  - deploy
+
+test-job:
+  stage: test
+  image: python:3.13-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+    - mkdir -p reports
+  script:
+    - pytest --junitxml=reports/report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/report.xml
+  allow_failure: false
