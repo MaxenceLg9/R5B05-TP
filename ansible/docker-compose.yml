@@ -1,0 +1,9 @@
+
+services:
+  app-MLAG:   # <------ Remplacer MKAN par votre code étudiant
+    image: "{{ image }}"  
+    command: ["python", "app.py"]
+
+
+
+
